@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3-Phase Induction Motor Controller</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .dashboard {
+      max-width: 1100px;
+      margin: auto;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .topbar h1 {
+      font-size: 1.8rem;
+      font-weight: bold;
+    }
+
+    .badge {
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      background: #334155;
+      font-weight: bold;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .card {
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .card h2 {
+      margin-bottom: 20px;
+      font-size: 1.3rem;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .btn {
+      border: none;
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      cursor: pointer;
+      color: white;
+      transition: 0.2s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .btn-green  { background: #16a34a; }
+    .btn-blue   { background: #2563eb; }
+    .btn-yellow { background: #ca8a04; }
+    .btn-red    { background: #dc2626; }
+
+    .mode-box {
+      margin-top: 20px;
+    }
+
+    .mode-box label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+
+    .mode-box select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      background: #334155;
+      color: white;
+      font-size: 1rem;
+    }
+
+    .status-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .status-item {
+      background: #334155;
+      padding: 14px;
+      border-radius: 12px;
+    }
+
+    .label {
+      display: block;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .value {
+      font-size: 1.15rem;
+      font-weight: bold;
+    }
+
+    .fault {
+      color: #f87171;
+    }
+
+    @media (max-width: 800px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <header class="topbar">
+      <h1>3-Phase Induction Motor Controller</h1>
+      <div class="badge" id="connectionBadge">Connecting...</div>
+    </header>
+
+    <main class="grid">
+      <!-- CONTROL PANEL -->
+      <section class="card">
+        <h2>Motor Control</h2>
+
+        <div class="controls">
+          <button class="btn btn-green" id="btnFwd">START FORWARD</button>
+          <button class="btn btn-blue" id="btnRev">START REVERSE</button>
+          <button class="btn btn-yellow" id="btnStop">STOP</button>
+          <button class="btn btn-red" id="btnEstop">EMERGENCY STOP</button>
+        </div>
+
+        <div class="mode-box">
+          <label for="modeSelect">Control Mode</label>
+          <select id="modeSelect">
+            <option value="OFFLINE">Offline</option>
+            <option value="ONLINE">Online</option>
+            <option value="HYBRID" selected>Hybrid</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- STATUS PANEL -->
+      <section class="card">
+        <h2>System Status</h2>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="label">Motor Status</span>
+            <span class="value" id="motorStatus">--</span>
+          </div>
+
+          <div class="status-item">
+            <span class="label">Temperature</span>
+            <span class="value" id="motorTemp">-- °C</span>
+          </div>
+
+          <div class="status-item">
+            <span class="label">Fault</span>
+            <span class="value fault" id="faultStatus">NONE</span>
+          </div>
+
+          <div class="status-item">
+            <span class="label">Last Update</span>
+            <span class="value" id="lastUpdate">--</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getDatabase,
+      ref,
+      set,
+      onValue
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // ================= FIREBASE CONFIG =================
+    const firebaseConfig = {
+  apiKey: "AIzaSyBlokvKEnAbf5qK-E8hPHEX2KNZP7SvvWc",
+  authDomain: "phase-induction-motor.firebaseapp.com",
+  databaseURL: "https://phase-induction-motor-default-rtdb.firebaseio.com",
+  projectId: "phase-induction-motor",
+  storageBucket: "phase-induction-motor.firebasestorage.app",
+  messagingSenderId: "759065744808",
+  appId: "1:759065744808:web:9b1f01fd30e0492a6e399d"
+};
+
+    // ================= INIT =================
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // ================= UI ELEMENTS =================
+    const motorStatusEl = document.getElementById("motorStatus");
+    const motorTempEl = document.getElementById("motorTemp");
+    const faultStatusEl = document.getElementById("faultStatus");
+    const lastUpdateEl = document.getElementById("lastUpdate");
+    const connectionBadge = document.getElementById("connectionBadge");
+    const modeSelect = document.getElementById("modeSelect");
+
+    // ================= BUTTON EVENTS =================
+    document.getElementById("btnFwd").onclick   = () => sendCommand("FWD");
+    document.getElementById("btnRev").onclick   = () => sendCommand("REV");
+    document.getElementById("btnStop").onclick  = () => sendCommand("STOP");
+    document.getElementById("btnEstop").onclick = () => sendCommand("ESTOP");
+
+    function sendCommand(cmd) {
+      set(ref(db, "motor/command"), cmd);
+    }
+
+    modeSelect.addEventListener("change", () => {
+      set(ref(db, "motor/mode"), modeSelect.value);
+    });
+
+    // ================= LIVE DATA =================
+    onValue(ref(db, "motor"), (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      connectionBadge.textContent = "Connected";
+      connectionBadge.style.background = "#16a34a";
+
+      motorStatusEl.textContent = data.status || "--";
+      motorTempEl.textContent = `${data.temperature?.toFixed(1) || "--"} °C`;
+      lastUpdateEl.textContent = new Date().toLocaleTimeString();
+
+      const status = data.status || "";
+
+      if (status.includes("FAULT") || status.includes("ESTOP")) {
+        faultStatusEl.textContent = status;
+        faultStatusEl.style.color = "#ef4444";
+      } else {
+        faultStatusEl.textContent = "NONE";
+        faultStatusEl.style.color = "#22c55e";
+      }
+
+      if (data.mode) modeSelect.value = data.mode;
+    }, () => {
+      connectionBadge.textContent = "Disconnected";
+      connectionBadge.style.background = "#dc2626";
+    });
+  </script>
+</body>
+</html>
